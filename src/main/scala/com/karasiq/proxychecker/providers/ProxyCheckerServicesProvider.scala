@@ -1,0 +1,3 @@
+package com.karasiq.proxychecker.providers
+
+trait ProxyCheckerServicesProvider extends ActorSystemProvider with GeoipResolverProvider with ProxyCheckerMeasurerEventBusProvider with ProxyCheckerMeasurerActorProvider with ProxyListParserProvider with ProxyStoreProvider with WebServiceCacheProvider with UpdateWatcherProvider with ProxyListSchedulerProvider

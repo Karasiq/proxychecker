@@ -1,0 +1,8 @@
+package com.karasiq.proxychecker.providers.default
+
+import com.karasiq.proxychecker.providers.ProxyCheckerMeasurerEventBusProvider
+import com.karasiq.proxychecker.worker.ProxyCheckerMeasurerEventBus
+
+trait DefaultProxyCheckerMeasurerEventBusProvider extends ProxyCheckerMeasurerEventBusProvider {
+  override final val proxyCheckerMeasurerEventBus: ProxyCheckerMeasurerEventBus = ProxyCheckerMeasurerEventBus()
+}

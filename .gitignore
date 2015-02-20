@@ -1,0 +1,5 @@
+.idea/
+target/
+*.log
+*.mmdb
+src/main/resources/webapp/

@@ -1,0 +1,3 @@
+[submodule "webapp"]
+	path = webapp
+	url = https://github.com/Karasiq/proxychecker-webapp.git
