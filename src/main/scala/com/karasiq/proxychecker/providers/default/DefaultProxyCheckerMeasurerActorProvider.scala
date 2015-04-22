@@ -34,7 +34,7 @@ trait DefaultProxyCheckerMeasurerActorProvider extends ProxyCheckerMeasurerActor
   private val proxyCheckerMeasurer: ProxyCheckerMeasurer = {
     val cfg = ConfigFactory.load().getConfig("proxyChecker")
 
-    ProxyCheckerMeasurer(cfg.getString("checkUrl"), cfg.getString("checkSubString"), cfg.getDuration("connectTimeout", TimeUnit.MILLISECONDS).millis, cfg.getDuration("readTimeout", TimeUnit.MILLISECONDS).millis)
+    ProxyCheckerMeasurer(cfg.getString("checkUrl"), cfg.getString("checkSubString"), cfg.getString("httpsCheckUrl"), cfg.getString("httpsCheckSubString"), cfg.getDuration("connectTimeout", TimeUnit.MILLISECONDS).millis, cfg.getDuration("readTimeout", TimeUnit.MILLISECONDS).millis)
   }
 
   private def props = Props(new ProxyCheckerMeasurerActor(proxyCheckerMeasurer, proxyCheckerMeasurerEventBus) with WithRetry)
