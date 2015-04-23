@@ -86,14 +86,15 @@ trait ProxyCheckerWebServiceProvider { self: ProxyCheckerServicesProvider ⇒
     proxyCheckerMeasurerActor ! worker.Proxy(address)
   }
 
-  private def filterProxies(alive: Option[Boolean] = None, protocol: Option[String] = None, country: Option[String] = None, newerThan: Option[Int] = None, olderThan: Option[Int] = None)(pl: ProxyList): Seq[ProxyStoreEntry] = {
+  private def filterProxies(alive: Option[Boolean] = None, protocol: Option[String] = None, country: Option[String] = None, newerThan: Option[Int] = None, olderThan: Option[Int] = None, latency: Option[Int] = None)(pl: ProxyList): Seq[ProxyStoreEntry] = {
     lazy val now = Instant.now()
     pl.valuesIterator.filter { proxy ⇒
       alive.fold(true)(proxy.isAlive ==) &&
         protocol.fold(true)(proxy.protocol ==) &&
         country.fold(true)(proxy.geoip.code ==) &&
         newerThan.fold(true)(rc ⇒ proxy.lastCheck.until(now, ChronoUnit.SECONDS) < rc) &&
-        olderThan.fold(true)(rc ⇒ proxy.lastCheck.until(now, ChronoUnit.SECONDS) > rc)
+        olderThan.fold(true)(rc ⇒ proxy.lastCheck.until(now, ChronoUnit.SECONDS) > rc) &&
+        latency.fold(true)(lt ⇒ proxy.speed.toMillis <= lt)
     }.toSeq
   }
 
@@ -102,10 +103,10 @@ trait ProxyCheckerWebServiceProvider { self: ProxyCheckerServicesProvider ⇒
 
     private def processFilteredList(listName: String): Directive1[Future[Seq[ProxyStoreEntry]]] = {
       import shapeless._
-      val params = parameters("alive".as[Boolean].?, "protocol".?, "country".?, "newerThan".as[Int].?, "olderThan".as[Int].?)
+      val params = parameters("alive".as[Boolean].?, "protocol".?, "country".?, "newerThan".as[Int].?, "olderThan".as[Int].?, "latency".as[Int].?)
       params.hmap {
-        case alive :: protocol :: country :: newerThan :: olderThan :: HNil ⇒
-          cachedProxyList(listName).map(filterProxies(alive, protocol, country, newerThan, olderThan))
+        case alive :: protocol :: country :: newerThan :: olderThan :: latency :: HNil ⇒
+          cachedProxyList(listName).map(filterProxies(alive, protocol, country, newerThan, olderThan, latency))
       }
     }
 
@@ -123,10 +124,7 @@ trait ProxyCheckerWebServiceProvider { self: ProxyCheckerServicesProvider ⇒
     }
 
     final def route: Route = listName { listName ⇒
-      (get & compressResponse((): Unit)) {
-        pathSingleSlash {
-          getFromResource("webapp/index.html")
-        } ~
+      get {
         path("lists.json")(complete {
           proxyStore.keysIterator
             .filter(_.nonEmpty)
@@ -144,7 +142,10 @@ trait ProxyCheckerWebServiceProvider { self: ProxyCheckerServicesProvider ⇒
         pathPrefix("flag") {
           getFromResourceDirectory("flags")
         } ~
-        getFromResourceDirectory("webapp")
+        compressResponse((): Unit) {
+          (pathSingleSlash(getFromResource("webapp/index.html"))) ~
+            getFromResourceDirectory("webapp")
+        }
       } ~
       post {
         (path("proxylist") & entity(as[String]) & parameter("temp".as[Boolean].?(false)))((text, temp) ⇒ complete {
