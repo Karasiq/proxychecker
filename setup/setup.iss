@@ -1,13 +1,13 @@
 #define OutputName "proxychecker"
 #define MyAppName "Proxyblyadok 9000"
 #define MyAppVersion "1.0"
-#define MyAppPublisher "My Company, Inc."
-#define MyAppURL "http://www.example.com/"
+#define MyAppPublisher "Karasiq, Inc."
+#define MyAppURL "http://www.github.com/Karasiq"
 #define MyAppExeName "bin\proxychecker.bat"
 #define ProjectFolder "..\"
 
 [Setup]
-AppId={{63309780-5847-4D35-86E7-6C1E899C099B}
+AppId={{63309780-5847-4D35-86E7-6C1E899C099B}}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 ;AppVerName={#MyAppName} {#MyAppVersion}
