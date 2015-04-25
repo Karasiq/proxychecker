@@ -21,28 +21,74 @@ import scala.language.postfixOps
 import scala.util.control.Exception
 import scala.util.{Failure, Success}
 
-private class SchedulerConfig(cfg: Config) {
-  val threads: Int = cfg.getInt("threads")
-  val interval: FiniteDuration = cfg.getDuration("interval", TimeUnit.SECONDS).seconds
-  val retention: FiniteDuration = cfg.getDuration("retention", TimeUnit.SECONDS).seconds
-  val refresh: Boolean = cfg.getBoolean("refresh")
-  val encoding: String = cfg.getString("encoding")
+/**
+ * Proxy list scheduler configuration
+ * @param threads Threads number
+ * @param interval Reloading interval
+ * @param retention Dead proxy retention
+ * @param refresh Recheck existing proxies
+ * @param encoding Sources encoding
+ */
+private final case class SchedulerConfig(threads: Int, interval: FiniteDuration, retention: FiniteDuration, refresh: Boolean, encoding: String) {
+  def createExecutionContext() = {
+    ExecutionContext.fromExecutorService(Executors.newWorkStealingPool(this.threads))
+  }
+}
+
+private object SchedulerConfig {
+  /**
+   * Loads configuration from Typesafe Config
+   * @param cfg Configuration object
+   * @return Scheduler configuration
+   */
+  def apply(cfg: Config): SchedulerConfig = {
+    SchedulerConfig(cfg.getInt("threads"), cfg.getDuration("interval", TimeUnit.SECONDS).seconds,
+      cfg.getDuration("retention", TimeUnit.SECONDS).seconds, cfg.getBoolean("refresh"), cfg.getString("encoding"))
+  }
+
+  private def defaultConfigKey = "proxyChecker.scheduler"
+
+  /**
+   * Loads default configuration
+   * @return Scheduler configuration
+   */
+  def apply(): SchedulerConfig = {
+    val cfg = ConfigFactory.load().getConfig(defaultConfigKey)
+    apply(cfg)
+  }
+}
+
+private object URLLoader {
+  private def timeout: Int = 10000
+  
+  def openURL[T](url: String)(f: InputStream ⇒ T): T = {
+    val inputStream: InputStream = {
+      val connection = new URL(url).openConnection()
+      connection.setConnectTimeout(timeout)
+      connection.setReadTimeout(timeout)
+      connection.getInputStream
+    }
+
+    Exception.allCatch.andFinally(inputStream.close()) {
+      f(inputStream)
+    }
+  }
 }
 
 trait DefaultProxyListSchedulerProvider extends ProxyListSchedulerProvider {
   self: ActorSystemProvider with WebServiceCacheProvider with ProxyStoreProvider with ProxyListParserProvider with ProxyCheckerMeasurerActorProvider with GeoipResolverProvider ⇒
   private val log: LoggingAdapter = Logging.getLogger(actorSystem, "ProxyListScheduler")
 
-  private val config: SchedulerConfig = new SchedulerConfig(ConfigFactory.load().getConfig("proxyChecker.scheduler"))
+  private val config: SchedulerConfig = SchedulerConfig()
 
-  implicit val listSchedulerEc = ExecutionContext.fromExecutorService(Executors.newWorkStealingPool(config.threads))
+  implicit val listSchedulerEc = config.createExecutionContext()
 
   private def scheduleRemoving(proxyList: ProxyList, retention: FiniteDuration, address: String): Unit = {
     def removeProxy(): Unit = {
       def proxyIsDead(p: ProxyStoreEntry) = !p.isAlive && p.lastCheck.until(Instant.now(), ChronoUnit.SECONDS) > 30
       if (proxyList.contains(address) && proxyIsDead(proxyList(address))) {
         proxyList.remove(address)
-        log.debug("Removing temporal proxy: {}", address)
+        log.debug("Removing dead proxy: {}", address)
         webServiceCache.remove(proxyList.name)
       }
     }
@@ -57,9 +103,9 @@ trait DefaultProxyListSchedulerProvider extends ProxyListSchedulerProvider {
   }
 
   private def addProxy(list: ProxyList, address: String): Unit = {
-    import GeoipResolver._
-    list.put(ProxyStoreEntry(address, geoip = geoipResolver(ProxyStoreEntry.addressToUri(address).getHost)))
-    scanProxy(address)
+    import GeoipResolver._ // Implicits
+    list.put(ProxyStoreEntry(address, geoip = geoipResolver(ProxyStoreEntry.addressToUri(address).getHost))) // Add to list
+    scanProxy(address) // Schedule for checking
   }
 
   private def refreshProxy(address: String): Unit = {
@@ -67,33 +113,25 @@ trait DefaultProxyListSchedulerProvider extends ProxyListSchedulerProvider {
     scanProxy(address)
   }
 
-  private def loadFromURL(list: ProxyList, url: String): Unit = {
-    def load(url: String): Seq[String] = {
+  private def updateListFrom(list: ProxyList, url: String): Unit = {
+    @inline
+    def loadAsync(url: String): Future[Set[String]] = Future {
       log.debug("Loading: {}", url)
-
-      // Open connection
-      val inputStream: InputStream = {
-        val connection = new URL(url).openConnection()
-        connection.setConnectTimeout(10000)
-        connection.setReadTimeout(10000)
-        connection.getInputStream
-      }
-
-      Exception.allCatch.andFinally(inputStream.close()) {
+      URLLoader.openURL(url) { inputStream ⇒
         val source = Source.fromInputStream(inputStream, config.encoding)
-        proxyListParser(source.getLines()).toSeq.distinct
+        proxyListParser(source.getLines()).toSet
       }
     }
 
-    Future(load(url)).onComplete {
+    loadAsync(url).onComplete {
       case Success(proxies) ⇒
-        log.info("Parsed {} proxies from {} to [{}]", proxies.length, url, list.name)
+        log.info("Parsed {} proxies from {} to [{}]", proxies.size, url, list.name)
         if (proxies.nonEmpty) {
           proxies.foreach { address ⇒
-            addProxy(list, address)
-            scheduleRemoving(list, config.retention, address)
+            addProxy(list, address) // Queue proxy for checking
+            scheduleRemoving(list, config.retention, address) // Auto-remove dead proxy
           }
-          webServiceCache.remove(list.name)
+          webServiceCache.remove(list.name) // Update cache
         }
 
       case Failure(e) ⇒
@@ -102,7 +140,7 @@ trait DefaultProxyListSchedulerProvider extends ProxyListSchedulerProvider {
   }
 
   private def refreshExisting(list: ProxyList): Unit = {
-    val toRefresh = list.valuesIterator.filter(_.lastCheck.until(Instant.now(), ChronoUnit.SECONDS) > config.interval.toSeconds).toSeq
+    val toRefresh = list.valuesIterator.filter(_.lastCheck.until(Instant.now(), ChronoUnit.SECONDS) > config.interval.toSeconds).toVector
     if (toRefresh.nonEmpty) {
       log.info("Rescanning {} proxies from list [{}]", toRefresh.size, list.name)
       toRefresh.foreach { p ⇒
@@ -113,18 +151,21 @@ trait DefaultProxyListSchedulerProvider extends ProxyListSchedulerProvider {
     }
   }
 
-  override final val proxyListScheduler = ProxyListScheduler(config.interval)((listName, sources) ⇒ {
+  private def loadSourcesToList(listName: String, sources: Set[String]): Unit = {
     log.debug("Loading {} sources to list [{}]", sources.size, listName)
-    val list = proxyStore(listName)
+    val list: ProxyList = proxyStore(listName)
     if (config.refresh) refreshExisting(list)
 
     // Load from sources
-    sources.foreach(loadFromURL(list, _))
-  })(actorSystem)
+    sources.foreach(url ⇒ updateListFrom(list, url))
+  }
+
+  override final val proxyListScheduler = ProxyListScheduler(config.interval)(loadSourcesToList)(actorSystem)
 
   private def scanAllListsIn(duration: FiniteDuration) = {
     log.info("Proxy lists will be updated in {}", duration)
     actorSystem.scheduler.scheduleOnce(duration) {
+      // Initial scanning
       proxyStore.valuesIterator.foreach(list ⇒ proxyListScheduler.schedule(list.name, list.sources))
     }
   }

@@ -1,9 +1,9 @@
 package com.karasiq.proxychecker.worker
 
-import java.io.IOException
 import java.net.URI
 
 import scala.concurrent.duration._
+import scala.util.control
 import scalaj.http.{Http, HttpOptions}
 
 trait ProxyCheckerMeasurer {
@@ -19,22 +19,33 @@ final private class ProxyCheckerMeasurerImpl(testPageUrl: String, testPageCheckS
     else (testPageUrl, testPageCheckString)
   }
 
-  private def check(proxy: URI): Option[FiniteDuration] = {
-    import java.net.Proxy.Type._
+  private def elapsedFrom(start: Long) = {
+    (System.nanoTime() - start).nanos
+  }
 
-    import scala.util.control.Exception.catching
-    val start = System.nanoTime()
+  private def tryLoadPage(proxy: URI, url: String): Option[String] = {
+    import java.net.Proxy.Type._
+    control.Exception.nonFatalCatch.opt {
+      Http(url)
+        .options(HttpOptions.connTimeout(connectTimeout.toMillis.toInt), HttpOptions.readTimeout(readTimeout.toMillis.toInt), HttpOptions.allowUnsafeSSL)
+        .proxy(proxy.getHost, proxy.getPort, if (proxy.getScheme == "socks") SOCKS else HTTP)
+        .asString
+    }
+  }
+
+  private def check(proxy: URI): Option[FiniteDuration] = {
+    val start: Long = System.nanoTime()
     checkFor(proxy) match {
       case (url, subString) ⇒
-        catching(classOf[IOException], classOf[scalaj.http.HttpException], classOf[AssertionError]).opt {
-          val page = Http(url)
-            .options(HttpOptions.connTimeout(connectTimeout.toMillis.toInt), HttpOptions.readTimeout(readTimeout.toMillis.toInt), HttpOptions.allowUnsafeSSL)
-            .proxy(proxy.getHost, proxy.getPort, if (proxy.getScheme == "socks") SOCKS else HTTP)
-          assert(page.asString.contains(subString))
-        } map (_ ⇒ (System.nanoTime() - start).nanos)
+        tryLoadPage(proxy, url) match {
+          case Some(page) if page.contains(subString) ⇒
+            Some(elapsedFrom(start))
 
-      case _ ⇒
-        None
+          case _ ⇒
+            None // Checking error
+        }
+
+      case _ ⇒ throw new IllegalArgumentException("No settings for proxy: " + proxy)
     }
   }
 
