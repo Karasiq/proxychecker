@@ -19,7 +19,7 @@ trait ProxyListScheduler {
 }
 
 
-private class ProxyListSchedulerImpl(ac: ActorSystem, interval: FiniteDuration, sourceLoad: (String, Set[String]) ⇒ Unit) extends ProxyListScheduler {
+private final class ProxyListSchedulerImpl(ac: ActorSystem, interval: FiniteDuration, sourceLoad: (String, Set[String]) ⇒ Unit) extends ProxyListScheduler {
   private implicit val ec = ac.dispatcher
 
   private val map = collection.concurrent.TrieMap.empty[String, Cancellable]

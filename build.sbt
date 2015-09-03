@@ -4,7 +4,7 @@ organization := "com.karasiq"
 
 version := "1.0"
 
-scalaVersion := "2.11.6"
+scalaVersion := "2.11.7"
 
 resolvers += "Spray" at "http://repo.spray.io"
 
@@ -13,12 +13,12 @@ resolvers += "softprops-maven" at "http://dl.bintray.com/content/softprops/maven
 scalacOptions ++= Seq("-optimize", "-deprecation")
 
 libraryDependencies ++= {
-  val sprayV = "1.3.2"
+  val sprayV = "1.3.3"
   Seq(
     "org.scalaj" %% "scalaj-http" % "0.3.16",
-    "com.typesafe.akka" %% "akka-actor" % "2.3.9",
-    "com.typesafe.akka" %% "akka-kernel" % "2.3.9",
-    "com.typesafe.akka" %% "akka-contrib" % "2.3.9",
+    "com.typesafe.akka" %% "akka-actor" % "2.3.11",
+    "com.typesafe.akka" %% "akka-kernel" % "2.3.11",
+    "com.typesafe.akka" %% "akka-contrib" % "2.3.11",
     "com.maxmind.geoip2" % "geoip2" % "2.1.0",
     "io.spray" %% "spray-can" % sprayV,
     "io.spray" %% "spray-routing-shapeless2" % sprayV,

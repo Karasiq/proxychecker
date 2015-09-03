@@ -37,7 +37,11 @@ trait ProxyCheckerWebServiceProvider { self: ProxyCheckerServicesProvider ⇒
     webServiceCache(listName)
   }
 
-  private val temporaryRetention = ConfigFactory.load().getDuration("proxyChecker.temporaryRetention", TimeUnit.SECONDS).seconds
+  private val config = ConfigFactory.load()
+
+  private val readOnly = config.getBoolean("proxyChecker.readOnly")
+
+  private val temporaryRetention = config.getDuration("proxyChecker.temporaryRetention", TimeUnit.SECONDS).seconds
 
   private def addProxy(listName: String, address: String, temp: Boolean, retention: FiniteDuration = temporaryRetention): Unit = {
     import GeoipResolver._
@@ -136,80 +140,82 @@ trait ProxyCheckerWebServiceProvider { self: ProxyCheckerServicesProvider ⇒
         (path("proxylist.txt") & processFilteredList(listName)) { list ⇒
           complete(list.map(_.map(_.address).mkString("\n")))
         } ~
-        path("sources.json")(complete {
-          proxyStore(listName).sources.toJson.compactPrint
-        }) ~
         pathPrefix("flag") {
           getFromResourceDirectory("flags")
         } ~
         compressResponse((): Unit) {
-          (pathSingleSlash(getFromResource("webapp/index.html"))) ~
+          pathSingleSlash(getFromResource("webapp/index.html")) ~
             getFromResourceDirectory("webapp")
         }
       } ~
-      post {
-        (path("proxylist") & entity(as[String]) & parameter("temp".as[Boolean].?(false)))((text, temp) ⇒ complete {
-          parseProxyList(listName, text, temp)
-          StatusCodes.OK
+      validate(!readOnly, "Not available in read-only mode") {
+        (get & path("sources.json"))(complete {
+          proxyStore(listName).sources.toJson.compactPrint
         }) ~
-        pathPrefix("rescan") {
-          parameter("address")(address ⇒ complete {
-            actorSystem.log.info("Rescanning proxy: {}", address)
-            refreshProxy(address)
-            webServiceCache.clear()
+        post {
+          (path("proxylist") & entity(as[String]) & parameter("temp".as[Boolean].?(false)))((text, temp) ⇒ complete {
+            parseProxyList(listName, text, temp)
             StatusCodes.OK
           }) ~
-          processFilteredList(listName)(f ⇒ onSuccess(f) { pl ⇒
-            actorSystem.log.info("Rescanning {} proxies from list [{}]", pl.size, listName)
-            pl.foreach(p ⇒ refreshProxy(p.address))
-            webServiceCache.remove(listName)
-            complete(StatusCodes.OK)
-          })
+            pathPrefix("rescan") {
+              parameter("address")(address ⇒ complete {
+                actorSystem.log.info("Rescanning proxy: {}", address)
+                refreshProxy(address)
+                webServiceCache.clear()
+                StatusCodes.OK
+              }) ~
+                processFilteredList(listName)(f ⇒ onSuccess(f) { pl ⇒
+                  actorSystem.log.info("Rescanning {} proxies from list [{}]", pl.size, listName)
+                  pl.foreach(p ⇒ refreshProxy(p.address))
+                  webServiceCache.remove(listName)
+                  complete(StatusCodes.OK)
+                })
+            } ~
+            (path("sources") & parameter("list") & entity(as[String]))((list, sources) ⇒ complete {
+              val src = sources.lines.filter(_.nonEmpty).toSet
+              actorSystem.log.info("Subscriptions changed for list {} ({} addresses)", list, src.size)
+              proxyStore.update(list, proxyStore(list).copy(sources = src))
+              proxyListScheduler.schedule(list, src)
+              StatusCodes.OK
+            })
         } ~
-        (path("sources") & parameter("list") & entity(as[String]))((list, sources) ⇒ complete {
-          val src = sources.lines.filter(_.nonEmpty).toSet
-          actorSystem.log.info("Subscriptions changed for list {} ({} addresses)", list, src.size)
-          proxyStore.update(list, proxyStore(list).copy(sources = src))
-          proxyListScheduler.schedule(list, src)
-          StatusCodes.OK
-        })
-      } ~
-      put {
-        (path("list") & parameters("list", "inmemory".as[Boolean].?(false)))((newListName, inMemory) ⇒ complete {
-          if (inMemory) {
-            actorSystem.log.info("In-memory list created: {}", newListName)
-            proxyStore += (newListName → ProxyList(newListName, Set(), new InMemoryProxyCollection))
-          } else {
-            actorSystem.log.info("List created: {}", newListName)
-            proxyStore.createList(newListName)
-          }
+        put {
+          (path("list") & parameters("list", "inmemory".as[Boolean].?(false)))((newListName, inMemory) ⇒ complete {
+            if (inMemory) {
+              actorSystem.log.info("In-memory list created: {}", newListName)
+              proxyStore += (newListName → ProxyList(newListName, Set(), new InMemoryProxyCollection))
+            } else {
+              actorSystem.log.info("List created: {}", newListName)
+              proxyStore.createList(newListName)
+            }
 
-          StatusCodes.OK
-        })
-      } ~
-      delete {
-        pathPrefix("proxy") {
-          parameter("address")(address ⇒ complete {
-            actorSystem.log.info("Deleting proxy {} from [{}]", address, listName)
-            removeProxy(listName, address)
-            webServiceCache.remove(listName)
             StatusCodes.OK
-          }) ~
-          processFilteredList(listName)(onSuccess(_) { toDelete ⇒
-            actorSystem.log.info("Deleting {} proxies from [{}]", toDelete.size, listName)
-            val proxyList = proxyStore(listName).proxies
-            toDelete.foreach(p ⇒ proxyList.remove(p.address))
-            webServiceCache.remove(listName)
-            complete(StatusCodes.OK)
           })
         } ~
-        path("list")(complete {
-          actorSystem.log.info("Deleting list: {}", listName)
-          proxyListScheduler.cancel(listName)
-          proxyStore -= listName
-          webServiceCache.remove(listName)
-          StatusCodes.OK
-        })
+        delete {
+          pathPrefix("proxy") {
+            parameter("address")(address ⇒ complete {
+              actorSystem.log.info("Deleting proxy {} from [{}]", address, listName)
+              removeProxy(listName, address)
+              webServiceCache.remove(listName)
+              StatusCodes.OK
+            }) ~
+              processFilteredList(listName)(onSuccess(_) { toDelete ⇒
+                actorSystem.log.info("Deleting {} proxies from [{}]", toDelete.size, listName)
+                val proxyList = proxyStore(listName).proxies
+                toDelete.foreach(p ⇒ proxyList.remove(p.address))
+                webServiceCache.remove(listName)
+                complete(StatusCodes.OK)
+              })
+          } ~
+            path("list")(complete {
+              actorSystem.log.info("Deleting list: {}", listName)
+              proxyListScheduler.cancel(listName)
+              proxyStore -= listName
+              webServiceCache.remove(listName)
+              StatusCodes.OK
+            })
+        }
       }
     }
   }

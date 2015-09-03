@@ -7,6 +7,20 @@ import scala.util.Try
  * Parser for nmap scan report with NSE: `--script http-open-proxy,socks-open-proxy`
  */
 class ProxyNmapParser extends ProxyListParser {
+  private object PortLine {
+    def unapply(line: String): Option[Int] = for {
+      portLine <- Option(line).filter(_.contains("/tcp open"))
+      port <- Try(portLine.split("/tcp open", 2)(0).toInt).toOption
+    } yield port
+  }
+  
+  private object IpLine {
+    def unapply(line: String): Option[String] = for {
+      ipLine <- Option(line).filter(_.contains("Nmap scan report for "))
+      ip <- Try(ipLine.split("Nmap scan report for ", 2)(1)).filter(_.nonEmpty).toOption
+    } yield ip
+  }
+  
   /**
    * @param raw Raw proxy paste
    * @return List of host:port
@@ -21,22 +35,19 @@ class ProxyNmapParser extends ProxyListParser {
    */
   override def apply(lines: Iterator[String]): Iterator[String] = {
     @tailrec
-    def findNext(ip: Option[String], port: Option[String], lines: Iterator[String]): Option[String] = {
-      def parseAddress(ipLine: Option[String], portLine: Option[String]): Option[String] = {
-        for {
-          ip <- ipLine.flatMap(l ⇒ Try(l.split("Nmap scan report for ", 2)(1)).toOption)
-          port <- portLine.flatMap(l ⇒ Try(l.split("/tcp open", 2)(0)).toOption)
-        } yield s"$ip:$port"
-      }
+    def findNext(lines: Iterator[String], ip: Option[String], port: Option[Int]): Option[String] = {
+      def parseAddress(ipOption: Option[String], portOption: Option[Int]): Option[String] = for {
+        ip <- ipOption
+        port <- portOption
+      } yield s"$ip:$port"
 
-      if (!lines.hasNext) None
-      else {
+      if (!lines.hasNext) None else {
         val (newIp, newPort, found) = lines.next() match {
-          case line if line.startsWith("Nmap scan report for ") ⇒
-            (Some(line), port, false)
+          case IpLine(foundIp) ⇒
+            (Some(foundIp), None, false)
 
-          case line if line.contains("/tcp open") ⇒
-            (ip, Some(line), line.contains("Open SOCKS Proxy") || line.contains("Open HTTP Proxy"))
+          case line @ PortLine(foundPort) ⇒
+            (ip, Some(foundPort), line.contains("Open SOCKS Proxy") || line.contains("Open HTTP Proxy"))
 
           case line if line.contains("Potentially OPEN proxy") ⇒
             (ip, port, true)
@@ -46,10 +57,11 @@ class ProxyNmapParser extends ProxyListParser {
         }
 
         if (found) parseAddress(newIp, newPort)
-        else findNext(newIp, newPort, lines)
+        else findNext(lines, newIp, newPort)
       }
     }
 
-    Iterator.continually(findNext(None, None, lines)).takeWhile(_.nonEmpty).flatten
+    Iterator.continually(findNext(lines, None, None))
+      .takeWhile(_.nonEmpty).flatten
   }
 }
