@@ -128,7 +128,7 @@ trait ProxyCheckerWebServiceProvider { self: ProxyCheckerServicesProvider ⇒
     }
 
     final def route: Route = listName { listName ⇒
-      get {
+      (get & compressResponse((): Unit)) {
         path("lists.json")(complete {
           proxyStore.keysIterator
             .filter(_.nonEmpty)
@@ -143,10 +143,8 @@ trait ProxyCheckerWebServiceProvider { self: ProxyCheckerServicesProvider ⇒
         pathPrefix("flag") {
           getFromResourceDirectory("flags")
         } ~
-        compressResponse((): Unit) {
-          pathSingleSlash(getFromResource("webapp/index.html")) ~
-            getFromResourceDirectory("webapp")
-        }
+        pathSingleSlash(getFromResource("webapp/index.html")) ~
+        getFromResourceDirectory("webapp")
       } ~
       validate(!readOnly, "Not available in read-only mode") {
         (get & path("sources.json"))(complete {
