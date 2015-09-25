@@ -15,7 +15,7 @@ private[proxychecker] object ProxyCheckerMapDb {
     }
   }
 
-  private lazy val mapDbFilePath: String = ConfigFactory.load().getString("proxyChecker.mapDb.path")
+  private val mapDbFilePath: String = ConfigFactory.load().getString("proxyChecker.mapDb.path")
 
   @inline
   def openDatabase(): MapDbFile = ProxyStoreDbProducer(Paths.get(mapDbFilePath))
