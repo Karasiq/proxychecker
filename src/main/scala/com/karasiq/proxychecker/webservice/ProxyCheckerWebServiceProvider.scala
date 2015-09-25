@@ -14,19 +14,30 @@ import com.typesafe.config.ConfigFactory
 import spray.can.websocket.FrameCommandFailed
 import spray.can.websocket.frame.TextFrame
 import spray.can.{Http, websocket}
-import spray.http.StatusCodes
+import spray.http.{ContentTypes, ContentType, HttpEntity, StatusCodes}
+import spray.httpx.marshalling.Marshaller
 import spray.json._
 import spray.routing._
+import spray.httpx._
 
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.control
+import ProxyStoreJsonProtocol._
+
+private class Marshallers(implicit ec: ExecutionContext) {
+  implicit val StringSeq = Marshaller.delegate[Seq[String], String](ContentTypes.`application/json`)(seq ⇒ seq.toJson.compactPrint)
+
+  implicit val ProxyStoreSeqJson = Marshaller.delegate[Future[Seq[ProxyStoreEntry]], Future[String]](ContentTypes.`application/json`)(f ⇒ f.map[String](seq ⇒ seq.toJson.compactPrint))
+}
 
 trait ProxyCheckerWebServiceProvider { self: ProxyCheckerServicesProvider ⇒
-  import ProxyStoreJsonProtocol._
-
   private implicit def executionContext: ExecutionContext = actorSystem.dispatcher
+
+  private val marshallers = new Marshallers()
+
+  import marshallers._
 
   // Default (in-memory) list
   private val defaultListName: String = ""
@@ -128,23 +139,25 @@ trait ProxyCheckerWebServiceProvider { self: ProxyCheckerServicesProvider ⇒
     }
 
     final def route: Route = listName { listName ⇒
-      (get & compressResponse((): Unit)) {
-        path("lists.json")(complete {
-          proxyStore.keysIterator
-            .filter(_.nonEmpty)
-            .toVector.toJson.compactPrint
-        }) ~
-        (path("proxylist.json") & processFilteredList(listName)) { list ⇒
-          complete(list.map(_.toJson.compactPrint))
-        } ~
+      get {
         (path("proxylist.txt") & processFilteredList(listName)) { list ⇒
           complete(list.map(_.map(_.address).mkString("\n")))
         } ~
-        pathPrefix("flag") {
-          getFromResourceDirectory("flags")
-        } ~
-        pathSingleSlash(getFromResource("webapp/index.html")) ~
-        getFromResourceDirectory("webapp")
+        compressResponse((): Unit) {
+          path("lists.json")(complete {
+            proxyStore.keysIterator
+              .filter(_.nonEmpty)
+              .toSeq
+          }) ~
+          (path("proxylist.json") & processFilteredList(listName)) { list ⇒
+            complete(list)
+          } ~
+          pathPrefix("flag") {
+            getFromResourceDirectory("flags")
+          } ~
+          pathSingleSlash(getFromResource("webapp/index.html")) ~
+          getFromResourceDirectory("webapp")
+        }
       } ~
       validate(!readOnly, "Not available in read-only mode") {
         (get & path("sources.json"))(complete {
@@ -260,7 +273,8 @@ trait ProxyCheckerWebServiceProvider { self: ProxyCheckerServicesProvider ⇒
     override def receive = handshaking orElse businessLogicNoUpgrade orElse closeLogic
 
     def businessLogic: Receive = {
-      case TextFrame(list) ⇒
+      case TextFrame(cmd) if cmd.startsWith("list=") ⇒
+        val list = cmd.drop(5)
         log.debug("WebSocket subscription list changed to {}", list.utf8String)
         currentList = list.utf8String
 
@@ -269,7 +283,7 @@ trait ProxyCheckerWebServiceProvider { self: ProxyCheckerServicesProvider ⇒
         send(TextFrame(entry.toJson.compactPrint)) // Web-Socket push
 
       case x: FrameCommandFailed ⇒
-        log.error("Frame command failed", x)
+        log.error("Frame command failed: {}", x)
     }
 
     def businessLogicNoUpgrade: Receive = runRoute(route)

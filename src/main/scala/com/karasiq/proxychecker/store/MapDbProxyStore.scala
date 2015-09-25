@@ -23,7 +23,7 @@ final private class MapDbProxyCollection(name_ : String) extends ProxyCollection
 
   @transient
   private lazy val map = mapDb.db // Underlying
-    .createHashMap(name).makeOrGet[String, ProxyStoreEntry]()
+    .hashMap[String, ProxyStoreEntry](name)
 
   @inline
   private def commit(): Unit = {
@@ -67,8 +67,7 @@ final private class MapDbProxyCollection(name_ : String) extends ProxyCollection
 final class MapDbProxyStore extends ProxyStore {
   private val mapDb = ProxyCheckerMapDb.openDatabase()
 
-  private val listMap = mapDb.db
-    .createHashMap("proxyStore").makeOrGet[String, ProxyList]()
+  private val listMap = mapDb.db.hashMap[String, ProxyList]("proxyStore")
 
   @inline
   private def commit(): Unit = {

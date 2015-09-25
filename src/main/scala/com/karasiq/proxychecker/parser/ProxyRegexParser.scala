@@ -2,20 +2,26 @@ package com.karasiq.proxychecker.parser
 
 import com.typesafe.config.ConfigFactory
 
+import scala.util.matching.Regex
+import scala.collection.JavaConversions._
+
 
 /**
  * Parses ip:port from text with regular expression
  */
 class ProxyRegexParser extends ProxyListParser {
-  val ipPortRegex = ConfigFactory.load().getString("proxyChecker.parser.regex").r
+  val regexList: Seq[Regex] = ConfigFactory.load().getStringList("proxyChecker.parser.regexes").map(_.r)
 
   /**
    * @param raw Raw proxy paste
    * @return List of host:port
    */
   override def apply(raw: String): Iterator[String] = {
-    val matches = ipPortRegex.findAllMatchIn(raw)
-    matches.map(m ⇒ s"${m.group(1)}:${m.group(2)}")
+    regexList
+      .flatMap(_.findAllMatchIn(raw))
+      .map(m ⇒ s"${m.group(1)}:${m.group(2)}")
+      .distinct
+      .toIterator
   }
 
   /**
