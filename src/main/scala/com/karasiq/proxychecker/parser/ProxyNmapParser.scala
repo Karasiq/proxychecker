@@ -3,14 +3,11 @@ package com.karasiq.proxychecker.parser
 import scala.annotation.tailrec
 import scala.util.Try
 
-/**
- * Parser for nmap scan report with NSE: `--script http-open-proxy,socks-open-proxy`
- */
 class ProxyNmapParser extends ProxyListParser {
   private object PortLine {
     def unapply(line: String): Option[Int] = for {
-      portLine <- Option(line).filter(_.contains("/tcp open"))
-      port <- Try(portLine.split("/tcp open", 2)(0).toInt).toOption
+      portLine <- Option(line)
+      port <- Try(portLine.split("/tcp\\s+open", 2)(0).toInt).toOption
     } yield port
   }
   
