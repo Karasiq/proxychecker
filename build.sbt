@@ -22,7 +22,6 @@ libraryDependencies ++= {
   Seq(
     "org.scalaj" %% "scalaj-http" % "0.3.16",
     "com.typesafe.akka" %% "akka-actor" % akkaV,
-    "com.typesafe.akka" %% "akka-kernel" % akkaV,
     "com.typesafe.akka" %% "akka-contrib" % akkaV,
     "com.maxmind.geoip2" % "geoip2" % "2.1.0",
     "io.spray" %% "spray-can" % sprayV,
