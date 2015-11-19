@@ -4,7 +4,7 @@ import akka.actor._
 import akka.io.IO
 import akka.kernel.Bootable
 import com.karasiq.proxychecker.providers.default.DefaultProxyCheckerServicesProvider
-import com.karasiq.proxychecker.store.ProxyCheckerMapDb
+import com.karasiq.proxychecker.store.mapdb.ProxyCheckerMapDb
 import com.typesafe.config.ConfigFactory
 import spray.can.Http
 import spray.can.server.UHttp
