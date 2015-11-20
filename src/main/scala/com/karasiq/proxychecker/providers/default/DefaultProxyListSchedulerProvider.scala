@@ -1,7 +1,5 @@
 package com.karasiq.proxychecker.providers.default
 
-import java.io.InputStream
-import java.net.URL
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.{Executors, TimeUnit}
@@ -19,7 +17,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.io.Source
 import scala.language.postfixOps
 import scala.util.control.Exception
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 /**
  * Proxy list scheduler configuration
@@ -55,23 +53,6 @@ private object SchedulerConfig {
   def apply(): SchedulerConfig = {
     val cfg = ConfigFactory.load().getConfig(defaultConfigKey)
     apply(cfg)
-  }
-}
-
-private object URLLoader {
-  private def timeout: Int = 10000
-  
-  def openURL[T](url: String)(f: InputStream ⇒ T): T = {
-    val inputStream: InputStream = {
-      val connection = new URL(url).openConnection()
-      connection.setConnectTimeout(timeout)
-      connection.setReadTimeout(timeout)
-      connection.getInputStream
-    }
-
-    Exception.allCatch.andFinally(inputStream.close()) {
-      f(inputStream)
-    }
   }
 }
 
@@ -115,15 +96,33 @@ trait DefaultProxyListSchedulerProvider extends ProxyListSchedulerProvider {
 
   private def updateListFrom(list: ProxyList, url: String): Unit = {
     @inline
-    def loadAsync(url: String): Future[Set[String]] = Future {
-      log.debug("Loading: {}", url)
-      URLLoader.openURL(url) { inputStream ⇒
-        val source = Source.fromInputStream(inputStream, config.encoding)
-        proxyListParser(source.getLines()).toSet
-      }
+    def loadAsync(pageUrl: String): Future[Set[String]] = {
+      val source = dispatch.url(pageUrl) <:< Map("User-Agent" → "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Win64; x64; Trident/5.0)")
+      dispatch.Http(source OK { response ⇒
+        val source = Source.fromInputStream(response.getResponseBodyAsStream, config.encoding)
+        Exception.allCatch.andFinally(source.close()) {
+          proxyListParser(source.getLines()).toSet
+        }
+      })
     }
 
-    loadAsync(url).onComplete {
+    @inline
+    def loadFile(fileUrl: String): Future[Set[String]] = {
+      Future.fromTry(Try {
+        val source = Source.fromURL(fileUrl, config.encoding)
+        Exception.allCatch.andFinally(source.close()) {
+          proxyListParser(source.getLines()).toSet
+        }
+      })
+    }
+
+    val future = if (url.startsWith("file:/")) {
+      loadFile(url)
+    } else {
+      loadAsync(url)
+    }
+
+    future.onComplete {
       case Success(proxies) ⇒
         log.info("Parsed {} proxies from {} to [{}]", proxies.size, url, list.name)
         if (proxies.nonEmpty) {

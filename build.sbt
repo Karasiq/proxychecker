@@ -33,7 +33,8 @@ libraryDependencies ++= {
     "org.scalatest" %% "scalatest" % "2.2.1" % "test",
     "com.github.karasiq" %% "mapdbutils" % "1.1-SNAPSHOT",
     "org.mapdb" % "mapdb" % "2.0-beta8",
-    "me.lessis" %% "retry" % "0.2.0"
+    "me.lessis" %% "retry" % "0.2.0",
+    "net.databinder.dispatch" %% "dispatch-core" % "0.11.2"
   )
 }
 
