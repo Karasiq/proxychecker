@@ -1,0 +1,33 @@
++dialog('new-list-dialog', 'Add new list')(okbutton={"ng-click":"controller.addList()"})
+    +form-input('new-list-name', 'name')(label='List name', attributes={'ng-model':'newListName'})
+    +form-checkbox('new-list-inmemory', 'inmemory', 'In-memory list')(attributes={'ng-model':'newListInMemory'})
+
++dialog('list-sources-dialog', 'Change list sources')(okbutton={"ng-click":"controller.modifyListSources()"})
+    +form-input('modify-list-name', 'name', 'hidden')(attributes={'ng-model':'modifyListName'})
+    +form-textarea('modify-list-sources', 'sources', 6)(ng-model='modifyListSources')
+
+.panel.panel-info
+    .panel-heading: h3.panel-title
+        span(data-toggle='collapse', data-target='#proxy-lists-panel-body')
+            +glyphicon('th-list')
+            |Proxy lists
+        .pull-right.panel-head-buttons
+            // New list button
+            span(title='Add new list', data-toggle='tooltip', data-placement='bottom'): +glyphicon-href('plus', '')(data-toggle = 'modal', data-target='#new-list-dialog')
+            span(title='Show default list', data-toggle='tooltip', data-placement='bottom'): +glyphicon-href('file', '')(ng-click='controller.changeList("")')
+
+    .panel-body.collapse.in#proxy-lists-panel-body
+        #lists-pagination-up(style='text-align:center;'): dir-pagination-controls(pagination-id='lists')
+
+        +table('proxy-lists-list', '#', 'List name')(class='table-hover table-condensed table-bordered')
+            tr(dir-paginate="list in proxyLists | orderBy | itemsPerPage:10: 'lists'", pagination-id='lists', ng-class='controller.listRowClass(list)')
+                td.buttons.col-md-1
+                    // Delete icon
+                    +glyphicon-href('remove', '')(ng-click='controller.removeList(list)')
+
+                    // Edit sources icon
+                    +glyphicon-href('list-alt', '')(ng-click='controller.modifyListSourcesDlg(list)')
+
+                td.list-name.col-md-11(ng-click='controller.changeList(list)') {{list}}
+
+        #lists-pagination-down(style='text-align:center;'): dir-pagination-controls(pagination-id='lists')

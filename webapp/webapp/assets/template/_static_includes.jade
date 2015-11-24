@@ -1,0 +1,25 @@
+meta(name="viewport", content="width=device-width, initial-scale=1.0")
+
+// Libraries
+// build:js js/lib.js
+script(src='bower/jquery/dist/jquery.js')
+script(src='bower/angular/angular.js')
+script(src='bower/bootstrap/dist/js/bootstrap.js')
+script(src='bower/angular-utils-pagination/dirPagination.js')
+script(src='bower/noty/js/noty/packaged/jquery.noty.packaged.js')
+// endbuild
+
+// Main app files
+script(src='js/proxychecker-webapp-opt.js')
+script(src='js/proxychecker-webapp-launcher.js')
+
+// build:css css/style.css
+link(rel='stylesheet', href='bower/bootstrap/dist/css/bootstrap.css')
+link(rel='stylesheet', href='css/style.css')
+// endbuild
+
+script(type='text/javascript').
+    // Bootstrap fix
+    $(function () {
+        $('[data-toggle="tooltip"]').tooltip();
+    });

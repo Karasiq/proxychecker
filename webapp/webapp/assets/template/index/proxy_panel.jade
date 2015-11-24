@@ -1,0 +1,61 @@
++dialog('paste-text-dialog', 'Check proxy list')(okbutton={"ng-click":"controller.addProxy()"})
+    textarea.form-control(rows=7, ng-model='proxyText')
+    +form-checkbox('paste-text-temp-checkbox', 'temp', 'Auto remove dead proxies')(attributes={'ng-model': 'proxyAddTemp'})
+
++infodlg('country-info-dialog', 'Country info')
+    img(ng-src='{{controller.getGeoipFlagSrc(countryInfo)}}').geoip-flag
+    // title='ISO code: {{countryInfo.code}}'
+    .country-name: h3: abbr(ng-bind='countryInfo.country', data-toggle='tooltip')
+    .city-name: h4(ng-bind='countryInfo.city')
+    hr
+    #country-info-dialog-buttons
+        +glyphicon-href('search')(ng-click='controller.countryShow(countryInfo)', title='Show only this country', data-toggle='tooltip', data-placement='left')
+        +glyphicon-href('trash')(ng-click='controller.countryDelete(countryInfo)', title='Delete all proxies from this country', data-toggle='tooltip', data-placement='right')
+    hr
+    #country-info-wikipedia-frame
+
+.panel.panel-primary
+    .panel-heading: h3.panel-title
+        +glyphicon('folder-open')
+        |Available proxies
+        .pull-right.panel-head-buttons
+            // Filter button
+            +glyphicon-href('filter')(ng-click='controller.changeLiveFilter()', title='Filter: alive / dead / all', data-toggle='tooltip', data-placement='bottom')
+            // Paste dialog button
+            span(title='Check new proxies', data-toggle='tooltip', data-placement='bottom'): +glyphicon-href('plus', '')(data-toggle = 'modal', data-target='#paste-text-dialog')
+            // Rescan all button
+            +glyphicon-href('refresh', '')(ng-click='controller.rescanDead()', ng-dblclick='controller.rescanAll()', title='Rescan dead/all proxies', data-toggle='tooltip', data-placement='bottom')
+            // Clean button
+            +glyphicon-href('trash', '')(ng-click='controller.deleteDead()', ng-dblclick='controller.deleteAll()', title='Delete dead/all proxies', data-toggle='tooltip', data-placement='bottom')
+            // Text view button
+            +glyphicon-href('copy', '')(ng-click='controller.openTxt()', title='Show as text file', data-toggle='tooltip', data-placement='bottom')
+    .panel-body
+        // Pages
+        #proxy-pagination-up(style='text-align:center;'): dir-pagination-controls(pagination-id='proxies')
+
+        +table('proxy-list', '#', 'Country', 'Protocol', 'Address', 'Latency', 'Last check')(class='table-hover table-condensed table-bordered')
+            tr(dir-paginate="proxy in proxies | filter:statusFilter | filter:countryFilter | orderBy:['-alive', 'latency'] | itemsPerPage:20: 'proxies'", pagination-id='proxies', ng-class='controller.proxyRowClass(proxy)')
+                td.buttons
+                    // Delete icon
+                    +glyphicon-href('remove', '')(title='Delete proxy', ng-click='controller.removeProxy(proxy.address)')
+
+                    // Rescan button
+                    +glyphicon-href('refresh', '')(title='Rescan proxy', ng-click='controller.rescan(proxy.address)')
+
+                    // Copy button
+                    span.dropdown
+                        +glyphicon-href('save', '')(title='Copy proxy to list', data-toggle='dropdown', data-targer='#')
+                        ul.dropdown-menu(role='menu')
+                            li(role='presentation', ng-repeat='listName in proxyLists', ng-if='listName != currentList')
+                                a(href='', role='menuitem', ng-click='controller.copyProxy(proxy.address, listName)') {{listName}}
+
+
+                td: .geoip(ng-if='proxy.geoip.code')
+                    img(ng-src='{{controller.getGeoipFlagSrc(proxy.geoip)}}').geoip-flag
+                    a(href='', ng-click='controller.showCountryInfo(proxy.geoip)') {{controller.getGeoipString(proxy.geoip)}}
+                td: .protocol {{proxy.protocol.toUpperCase()}}
+                td: .address {{proxy.address}}
+                td: .latency {{proxy.latency}} ms
+                td: .lastCheck {{proxy.lastCheck}}
+
+        #proxy-pagination-down(style='text-align:center;'): dir-pagination-controls(pagination-id='proxies')

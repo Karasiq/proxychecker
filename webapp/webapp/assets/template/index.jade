@@ -1,0 +1,16 @@
+include macro/bootstrap
+include macro/common
+
+doctype html
+html(ng-app='proxyChecker', data-framework='angularjs')
+    head
+        base(href='/')
+        title Proxyblyadok 9000
+        include _static_includes
+
+    body: .container#main-container(ng-controller='proxyTableCtrl')
+        .row: .col-md-12
+            #proxy-lists-panel
+                include index/proxy_lists_panel
+            #proxy-panel
+                include index/proxy_panel

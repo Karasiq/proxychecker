@@ -1,0 +1,51 @@
+#main-container {
+    padding: 20px;
+}
+
+@media (min-width: 768px) {
+    #main-container {
+        max-width: 80%;
+    }
+}
+
+#proxy-list-tbody tr td {
+    vertical-align: middle;
+}
+
+td.buttons {
+    text-align: center;
+}
+
+#proxy-list .protocol {
+    text-align: center;
+}
+
+.panel-primary .panel-head-buttons .glyphicon {
+    color: white;
+}
+
+.geoip-flag {
+    margin-right: 3px;
+}
+
+.glyphicon {
+    margin-left: 2px;
+    margin-right: 2px;
+}
+
+.panel-title .glyphicon {
+    margin-right: 10px;
+}
+
+#proxy-list .protocol {
+    font-weight: bold;
+}
+
+#country-info-dialog .modal-body {
+    text-align: center;
+}
+
+#country-info-dialog-buttons .glyphicon {
+    font-size: 2em;
+    margin-right: 10px;
+}
