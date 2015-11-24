@@ -2,5 +2,7 @@
 target/
 *.log
 *.mmdb
-src/main/resources/webapp/
-*.bat
+webapp/webapp/out
+webapp/webapp/node_modules
+webapp/webapp/bower_components
+webapp/webapp/assets/bower

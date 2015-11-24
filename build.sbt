@@ -1,22 +1,16 @@
-name := "proxychecker"
-
-organization := "com.karasiq"
-
-isSnapshot := true
-
-version := "1.2-SNAPSHOT"
-
-scalaVersion := "2.11.7"
-
-resolvers ++= Seq(
-  "Spray" at "http://repo.spray.io",
-  "softprops-maven" at "http://dl.bintray.com/content/softprops/maven",
-  Resolver.sonatypeRepo("snapshots")
+val commonSettings = Seq(
+  organization := "com.karasiq",
+  isSnapshot := true,
+  version := "1.2-SNAPSHOT",
+  scalaVersion := "2.11.7",
+  resolvers ++= Seq(
+    "Spray" at "http://repo.spray.io",
+    "softprops-maven" at "http://dl.bintray.com/content/softprops/maven",
+    Resolver.sonatypeRepo("snapshots")
+  )
 )
 
-scalacOptions ++= Seq("-optimize", "-deprecation")
-
-libraryDependencies ++= {
+val backendDeps = {
   val sprayV = "1.3.3"
   val akkaV = "2.3.11"
   Seq(
@@ -38,15 +32,28 @@ libraryDependencies ++= {
   )
 }
 
-mainClass in Compile := Some("com.karasiq.proxychecker.webservice.ProxyCheckerBoot")
+lazy val backendSettings = Seq(
+  name := "proxychecker",
+  libraryDependencies ++= backendDeps,
+  mainClass in Compile := Some("com.karasiq.proxychecker.webservice.ProxyCheckerBoot"),
+  gulpAssets in Compile := file("webapp") / "webapp",
+  gulpCompile in Compile <<= (gulpCompile in Compile).dependsOn(fullOptJS in Compile in frontend)
+)
 
-enablePlugins(JavaAppPackaging)
+lazy val frontendSettings = Seq(
+  name := "proxychecker-webapp",
+  libraryDependencies ++= Seq(
+    "com.greencatsoft" %%% "scalajs-angular" % "0.5",
+    "com.lihaoyi" %%% "upickle" % "0.3.6",
+    "org.scala-js" %%% "scalajs-dom" % "0.8.0"
+  ),
+  persistLauncher in Compile := true
+)
 
-lazy val compileWebapp = taskKey[Unit]("Compiles web application")
+lazy val frontend = Project("proxychecker-webapp", file("webapp"))
+  .enablePlugins(ScalaJSPlugin)
+  .settings(commonSettings, frontendSettings)
 
-compileWebapp in Compile := {
-  import sys.process._
-  assert(Seq("webapp/make.bat").! == 0, "Webapp compilation failed")
-}
-
-compile in Compile <<= (compile in Compile).dependsOn(compileWebapp in Compile)
+lazy val backend = Project("proxychecker", file("."))
+  .enablePlugins(GulpPlugin, JavaAppPackaging)
+  .settings(commonSettings, backendSettings)
