@@ -1,7 +1,7 @@
 val commonSettings = Seq(
   organization := "com.karasiq",
-  isSnapshot := true,
-  version := "1.2-SNAPSHOT",
+  isSnapshot := false,
+  version := "1.2.0-M1",
   scalaVersion := "2.11.7",
   resolvers ++= Seq(
     "Spray" at "http://repo.spray.io",
