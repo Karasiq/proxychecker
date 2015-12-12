@@ -12,7 +12,7 @@ val commonSettings = Seq(
 
 val backendDeps = {
   val sprayV = "1.3.3"
-  val akkaV = "2.3.11"
+  val akkaV = "2.4.0"
   Seq(
     "org.scalaj" %% "scalaj-http" % "0.3.16",
     "com.typesafe.akka" %% "akka-actor" % akkaV,

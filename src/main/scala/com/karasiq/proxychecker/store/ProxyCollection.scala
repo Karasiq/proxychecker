@@ -4,6 +4,7 @@ import java.time.Instant
 
 import scala.collection.mutable
 import scala.concurrent.duration._
+import scala.language.implicitConversions
 
 object ProxyCollection {
   implicit def proxyCollectionToSeq(c: ProxyCollection): Seq[ProxyStoreEntry] = c.valuesIterator.toVector
@@ -21,8 +22,11 @@ trait ProxyCollection extends mutable.Map[String, ProxyStoreEntry] {
   }
 }
 
-abstract class ProxyCollectionImpl[M <: mutable.Map[String, ProxyStoreEntry]](@transient protected val entryMap: M) extends ProxyCollection {
+abstract class ProxyCollectionImpl[M <: mutable.Map[String, ProxyStoreEntry]] extends ProxyCollection {
+  def entryMap: M
+
   override def +=(kv: (String, ProxyStoreEntry)): this.type = {
+    require(kv._2.ne(null), "Invalid value")
     entryMap.+=(kv)
     this
   }

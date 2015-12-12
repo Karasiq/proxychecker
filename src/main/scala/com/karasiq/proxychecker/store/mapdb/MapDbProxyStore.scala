@@ -50,11 +50,15 @@ private[mapdb] object MapDbProxyCollection {
   }
 }
 
-final private class MapDbProxyCollection(name: String) extends ProxyCollectionImpl(MapDbProxyCollection.entryMap(name)) with Serializable
+final private class MapDbProxyCollection(name: String) extends ProxyCollectionImpl[MapDbTreeMap[String, ProxyStoreEntry]] with Serializable {
+  @transient
+  override lazy val entryMap: MapDbTreeMap[String, ProxyStoreEntry] = MapDbProxyCollection.entryMap(name)
+}
 
 final class MapDbProxyStore extends ProxyStoreImpl(MapDbProxyCollection.listMap()) {
   override def createList(name: String): ProxyList = {
     assert(!contains(name), "List already exists: " + name)
+    assert(!name.contains("$"), "Invalid list name")
     val collection = MapDbProxyCollection(name)
     val list = ProxyList(name, Set(), collection)
     this += (name → list)
