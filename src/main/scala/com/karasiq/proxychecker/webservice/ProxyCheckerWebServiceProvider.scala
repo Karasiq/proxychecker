@@ -7,6 +7,7 @@ import java.util.concurrent.TimeUnit
 import akka.actor._
 import com.karasiq.geoip.GeoipResolver
 import com.karasiq.proxychecker.providers.ProxyCheckerServicesProvider
+import com.karasiq.proxychecker.store.ProxyStoreJsonProtocol._
 import com.karasiq.proxychecker.store.{InMemoryProxyCollection, ProxyList, ProxyStoreEntry, ProxyStoreJsonProtocol}
 import com.karasiq.proxychecker.worker
 import com.karasiq.proxychecker.worker.MeasuredProxy
@@ -14,17 +15,16 @@ import com.typesafe.config.ConfigFactory
 import spray.can.websocket.FrameCommandFailed
 import spray.can.websocket.frame.TextFrame
 import spray.can.{Http, websocket}
-import spray.http.{ContentTypes, ContentType, HttpEntity, StatusCodes}
+import spray.http.{ContentTypes, StatusCodes}
+import spray.httpx._
 import spray.httpx.marshalling.Marshaller
 import spray.json._
 import spray.routing._
-import spray.httpx._
 
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.control
-import ProxyStoreJsonProtocol._
 
 private class Marshallers(implicit ec: ExecutionContext) {
   implicit val StringSeq = Marshaller.delegate[Seq[String], String](ContentTypes.`application/json`)(seq ⇒ seq.toJson.compactPrint)
@@ -67,7 +67,7 @@ trait ProxyCheckerWebServiceProvider { self: ProxyCheckerServicesProvider ⇒
       proxyList.put(ProxyStoreEntry(address, geoip = geoip))
 
       // Check proxy
-      proxyCheckerMeasurerActor ! worker.Proxy(address)
+      proxyCheckerMeasurerActor ! worker.ProxyCheckRequest(address)
     } else {
       refreshProxy(address)
     }
@@ -98,7 +98,7 @@ trait ProxyCheckerWebServiceProvider { self: ProxyCheckerServicesProvider ⇒
 
   private def refreshProxy(address: String): Unit = {
     proxyStore.update(address, latency = Duration.Inf) // Reset to "dead"
-    proxyCheckerMeasurerActor ! worker.Proxy(address)
+    proxyCheckerMeasurerActor ! worker.ProxyCheckRequest(address)
   }
 
   private def filterProxies(alive: Option[Boolean] = None, protocol: Option[String] = None, country: Option[String] = None, newerThan: Option[Int] = None, olderThan: Option[Int] = None, latency: Option[Int] = None)(pl: ProxyList): Seq[ProxyStoreEntry] = {

@@ -1,8 +1,8 @@
 val commonSettings = Seq(
   organization := "com.karasiq",
-  isSnapshot := false,
-  version := "1.2.0-M1",
-  scalaVersion := "2.11.7",
+  version := "1.2.0-SNAPSHOT",
+  isSnapshot := version.value.endsWith("SNAPSHOT"),
+  scalaVersion := "2.11.8",
   resolvers ++= Seq(
     "Spray" at "http://repo.spray.io",
     "softprops-maven" at "http://dl.bintray.com/content/softprops/maven",
@@ -12,7 +12,7 @@ val commonSettings = Seq(
 
 val backendDeps = {
   val sprayV = "1.3.3"
-  val akkaV = "2.3.9"
+  val akkaV = "2.4.6"
   Seq(
     "org.scalaj" %% "scalaj-http" % "0.3.16",
     "com.typesafe.akka" %% "akka-actor" % akkaV,
@@ -26,9 +26,9 @@ val backendDeps = {
     "com.wandoulabs.akka" %% "spray-websocket" % "0.1.4",
     "org.scalatest" %% "scalatest" % "2.2.1" % "test",
     "com.github.karasiq" %% "mapdbutils" % "1.1-SNAPSHOT",
+    "com.github.karasiq" %% "proxyutils" % "2.0.9",
     "org.mapdb" % "mapdb" % "2.0-beta8",
-    "me.lessis" %% "retry" % "0.2.0",
-    "net.databinder.dispatch" %% "dispatch-core" % "0.11.2"
+    "me.lessis" %% "retry" % "0.2.0"
   )
 }
 

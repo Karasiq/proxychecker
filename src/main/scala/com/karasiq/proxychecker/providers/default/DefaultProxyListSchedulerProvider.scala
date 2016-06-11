@@ -5,11 +5,15 @@ import java.time.temporal.ChronoUnit
 import java.util.concurrent.{Executors, TimeUnit}
 
 import akka.event.{Logging, LoggingAdapter}
+import akka.http.scaladsl.Http
+import akka.http.scaladsl.model.headers.{Host, `User-Agent`}
+import akka.http.scaladsl.model.{HttpRequest, Uri}
+import akka.util.ByteString
 import com.karasiq.geoip.GeoipResolver
 import com.karasiq.proxychecker.providers._
 import com.karasiq.proxychecker.scheduler.ProxyListScheduler
 import com.karasiq.proxychecker.store.{ProxyList, ProxyStoreEntry}
-import com.karasiq.proxychecker.worker.Proxy
+import com.karasiq.proxychecker.worker.ProxyCheckRequest
 import com.typesafe.config.{Config, ConfigFactory}
 
 import scala.concurrent.duration._
@@ -58,10 +62,10 @@ private object SchedulerConfig {
 
 trait DefaultProxyListSchedulerProvider extends ProxyListSchedulerProvider {
   self: ActorSystemProvider with WebServiceCacheProvider with ProxyStoreProvider with ProxyListParserProvider with ProxyCheckerMeasurerActorProvider with GeoipResolverProvider ⇒
+
+  private val http = Http(actorSystem)
   private val log: LoggingAdapter = Logging.getLogger(actorSystem, "ProxyListScheduler")
-
   private val config: SchedulerConfig = SchedulerConfig()
-
   implicit val listSchedulerEc = config.createExecutionContext()
 
   private def scheduleRemoving(proxyList: ProxyList, retention: FiniteDuration, address: String): Unit = {
@@ -79,31 +83,32 @@ trait DefaultProxyListSchedulerProvider extends ProxyListSchedulerProvider {
     }
   }
 
-  private def scanProxy(address: String): Unit = {
-    proxyCheckerMeasurerActor ! Proxy(address)
+  private def scheduleCheck(address: String): Unit = {
+    proxyCheckerMeasurerActor ! ProxyCheckRequest(address)
   }
 
   private def addProxy(list: ProxyList, address: String): Unit = {
     import GeoipResolver._ // Implicits
     list.put(ProxyStoreEntry(address, geoip = geoipResolver(ProxyStoreEntry.addressToUri(address).getHost))) // Add to list
-    scanProxy(address) // Schedule for checking
+    scheduleCheck(address)
   }
 
   private def refreshProxy(address: String): Unit = {
     proxyStore.update(address) // Reset to dead
-    scanProxy(address)
+    scheduleCheck(address)
   }
 
   private def updateListFrom(list: ProxyList, url: String): Unit = {
     @inline
-    def loadAsync(pageUrl: String): Future[Set[String]] = {
-      val source = dispatch.url(pageUrl) <:< Map("User-Agent" → "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Win64; x64; Trident/5.0)")
-      dispatch.Http(source OK { response ⇒
-        val source = Source.fromInputStream(response.getResponseBodyAsStream, config.encoding)
-        Exception.allCatch.andFinally(source.close()) {
-          proxyListParser(source.getLines()).toSet
-        }
-      })
+    def loadHttpAsync(pageUrl: String): Future[Set[String]] = {
+      val uri: Uri = pageUrl
+      val request = HttpRequest(uri = uri, headers = List(Host(uri.authority), `User-Agent`("Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Win64; x64; Trident/5.0)")))
+      val response = http.singleRequest(request)
+        .flatMap(_.entity.dataBytes.runFold(ByteString.empty)(_ ++ _))
+
+      response.map { response ⇒
+        proxyListParser(response.decodeString(config.encoding)).toSet
+      }
     }
 
     @inline
@@ -119,7 +124,7 @@ trait DefaultProxyListSchedulerProvider extends ProxyListSchedulerProvider {
     val future = if (url.startsWith("file:/")) {
       loadFile(url)
     } else {
-      loadAsync(url)
+      loadHttpAsync(url)
     }
 
     future.onComplete {

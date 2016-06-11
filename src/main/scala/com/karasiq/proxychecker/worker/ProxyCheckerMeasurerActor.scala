@@ -1,17 +1,17 @@
 package com.karasiq.proxychecker.worker
 
-import java.util.concurrent.Executors
-
+import akka.NotUsed
 import akka.actor.{Actor, ActorLogging, Props}
+import akka.stream.scaladsl.Source
+import akka.stream.{ActorMaterializer, ActorMaterializerSettings}
 
 import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 
-case class Proxy(address: String, protocols: Set[String] = Set("http", "https", "socks")) {
+case class ProxyCheckRequest(address: String, protocols: Set[String] = Set("http", "https", "socks")) {
   assert(protocols.nonEmpty, "Invalid protocols")
 
-  override def toString: String = s"Proxy($address)"
+  override def toString: String = s"ProxyCheckRequest($address)"
 }
 
 case class MeasuredProxy(address: String, protocol: String, time: FiniteDuration) {
@@ -19,35 +19,27 @@ case class MeasuredProxy(address: String, protocol: String, time: FiniteDuration
 }
 
 object ProxyCheckerMeasurerActor {
-  def props(checker: ProxyCheckerMeasurer, eventBus: ProxyCheckerMeasurerEventBus) =
+  def props(checker: ProxyCheckerMeasurer, eventBus: ProxyCheckerMeasurerEventBus) = {
     Props(classOf[ProxyCheckerMeasurerActor], checker, eventBus)
+  }
 }
 
 class ProxyCheckerMeasurerActor(checker: ProxyCheckerMeasurer, eventBus: ProxyCheckerMeasurerEventBus) extends Actor with ActorLogging {
-  protected implicit val executionContext = ExecutionContext.fromExecutorService(Executors.newCachedThreadPool()) // Checker pool
+  private implicit val actorMaterializer = ActorMaterializer(ActorMaterializerSettings(context.system))
 
-  @throws[Exception](classOf[Exception])
-  override def postStop(): Unit = {
-    executionContext.shutdown()
-    super.postStop()
+  def postCheck(result: MeasuredProxy): Unit = {
+    log.debug("Proxy check result: {}", result)
+    eventBus.publish(result)
   }
 
-  def postCheck(r: MeasuredProxy): Unit = {
-    log.debug("Proxy check result: {}", r)
-    eventBus.publish(r)
-  }
-
-  def checkProxy(proxy: Proxy): Future[Iterator[MeasuredProxy]] = Future {
+  def checkProxy(proxy: ProxyCheckRequest): Source[MeasuredProxy, NotUsed] = {
     log.debug("Checking proxy: {}", proxy)
     checker(proxy)
   }
 
   override final def receive: Receive = {
-    case proxy: Proxy ⇒
-      checkProxy(proxy).onSuccess {
-        case results ⇒
-          results.foreach(postCheck)
-      }
+    case proxy: ProxyCheckRequest ⇒
+      checkProxy(proxy).runForeach(postCheck)
   }
 }
 
